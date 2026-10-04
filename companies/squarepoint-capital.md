@@ -4,15 +4,47 @@
 
 **Format:** <fill in — number of questions, time limit, platform>
 
-### Question 1 — Count pairs with sum in range
+### Question 1 — Count Ordered Pairs With Sum in a Range
 - **Difficulty:** Medium
-- **Problem:** Given an array `arr`, find the total number of ordered pairs `(i, j)` such that `lower_limit < arr[i] + arr[j] < upper_limit`.
-- **Topics:** Arrays, sorting, two-pointer, binary search
-- **Notes:** Brute force is O(n²) (check every pair). Optimize to O(n log n):
-  - Sort the array first.
-  - For each `i`, binary search for the range of `j` satisfying the sum bounds, or
-  - Use two pointers moving inward after sorting (one pointer tracks upper bound, one tracks lower bound) to count valid pairs in a single pass per boundary.
-  - Watch for: ordered vs. unordered pairs (does `(i,j)` and `(j,i)` both count, and is `i == j` allowed?), and whether bounds are strict (`<`) or inclusive (`<=`).
+- **Problem:** Given an array `nums`, find the total number of ordered pairs `(i, j)` such that `lower < nums[i] + nums[j] < upper`.
+- **Topics:** Arrays, sorting, two-pointer
+- **Notes:** Brute force is O(n²). Optimize to O(n log n):
+  - A strict range condition `lower < sum < upper` splits into `(pairs with sum < upper) - (pairs with sum < lower + 1)`.
+  - Sort the array, then two-pointer sweep with `l = 0, r = n-1`: if `nums[l] + nums[r] < target`, then `nums[l]` pairs validly with everything from `l+1` to `r`, i.e. `r - l` combinations — add that and move `l++`. Otherwise move `r--`.
+  - This counts each unordered combination once (`l < r`), so multiply the final result by 2 to get ordered pairs `(i,j)` and `(j,i)`.
+  - Use `long long` to avoid overflow.
+```cpp
+#include <vector>
+#include <algorithm>
+using namespace std;
+
+class Solution {
+public:
+    long long countOrderedPairs(vector<int>& nums, int lower, int upper) {
+        sort(nums.begin(), nums.end());
+
+        long long combinations = helper(nums, upper) - helper(nums, lower + 1);
+
+        return combinations * 2;
+    }
+
+    long long helper(vector<int>& nums, int target) {
+        int l = 0;
+        int r = nums.size() - 1;
+        long long count = 0;
+
+        while (l < r) {
+            if (nums[l] + nums[r] < target) {
+                count += (r - l);
+                l++;
+            } else {
+                r--;
+            }
+        }
+        return count;
+    }
+};
+```
 
 ### Question 2 — Palindrome Transformation
 - **Difficulty:** Medium/Hard
@@ -268,6 +300,85 @@ long long maxProfit(vector<int>& category, vector<int>& price) {
     ans -= multiplier * minsum; // Remove the initial unlock items we already sold
 
     return ans;
+}
+```
+
+### Question 7 — FIX Field Substitution
+- **Difficulty:** Hard
+- **Problem:** Given a target `fixTag`, a `mappings` dict (old value → new value), and a list of FIX protocol messages (`|`-delimited tag=value tokens), replace the value of `fixTag` wherever it matches a key in `mappings`. If a message changes, recompute its metadata:
+  - **Tag 9 (BodyLength)**: always the 2nd field — exact character count of all fields between Tag 9 and Tag 10 (each including its trailing `|`).
+  - **Tag 10 (CheckSum)**: always the last field — sum of ASCII values of every character from the start of the message through the `|` before Tag 10, mod 256, zero-padded to exactly 3 digits.
+- **Topics:** String parsing/tokenizing, simulation
+- **Notes:** Tokenize on `|`, skip tags 8/9 (header) and 10 (checksum, recomputed) when searching for the target tag. Only recompute BodyLength/CheckSum if a substitution actually happened (`changed` flag) — otherwise leave the message untouched. Order of operations matters: update the field → recompute BodyLength → recompute CheckSum over the *new* message → rebuild the string.
+```cpp
+#include <vector>
+#include <string>
+#include <map>
+#include <sstream>
+#include <iomanip>
+using namespace std;
+
+vector<string> substituteFixMessage(int fixTag, const map<string, string>& mappings, const vector<string>& FIXMessages) {
+    vector<string> result;
+    string targetTag = to_string(fixTag);
+
+    for (const string& msg : FIXMessages) {
+        vector<string> tokens;
+        string currentToken;
+        for (char c : msg) {
+            if (c == '|') {
+                tokens.push_back(currentToken);
+                currentToken.clear();
+            } else {
+                currentToken += c;
+            }
+        }
+
+        bool changed = false;
+        for (size_t i = 2; i < tokens.size() - 1; ++i) {
+            size_t equalPos = tokens[i].find('=');
+            if (equalPos != string::npos) {
+                string tag = tokens[i].substr(0, equalPos);
+                string val = tokens[i].substr(equalPos + 1);
+
+                if (tag == targetTag && mappings.find(val) != mappings.end()) {
+                    tokens[i] = tag + "=" + mappings.at(val);
+                    changed = true;
+                }
+            }
+        }
+
+        if (!changed) {
+            result.push_back(msg);
+            continue;
+        }
+
+        int newBodyLength = 0;
+        for (size_t i = 2; i < tokens.size() - 1; ++i) {
+            newBodyLength += tokens[i].length() + 1;
+        }
+        tokens[1] = "9=" + to_string(newBodyLength);
+
+        int checksumSum = 0;
+        for (size_t i = 0; i < tokens.size() - 1; ++i) {
+            for (char c : tokens[i]) {
+                checksumSum += c;
+            }
+            checksumSum += '|';
+        }
+
+        int checksum = checksumSum % 256;
+        ostringstream oss;
+        oss << setfill('0') << setw(3) << checksum;
+        tokens.back() = "10=" + oss.str();
+
+        string finalMsg = "";
+        for (const string& token : tokens) {
+            finalMsg += token + "|";
+        }
+        result.push_back(finalMsg);
+    }
+    return result;
 }
 ```
 
