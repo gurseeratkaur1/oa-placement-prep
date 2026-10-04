@@ -217,44 +217,55 @@ long long findMinIncrease(vector<int>& threadSize) {
 }
 ```
 
-### Question 6 — Max Profit by Category (statement TBD)
-- **Difficulty:** <fill in>
-- **Problem:** _(exact wording not captured — fill in when available)._ From the code: given `category[]` and `price[]`, find the minimum price per category, sort those minimums (`temp`), then compute a profit-like value combining a rank-weighted sum of the minimums with `(number of distinct categories) * (sum of all prices - sum of category minimums)`.
-- **Topics:** Hash map (min per key), sorting, prefix-sum style weighted aggregation
-- **Notes:** Revisit once the original problem statement is on hand — the code alone doesn't make the "profit" framing obvious.
+### Question 6 — Maximize Profit from Category Sales
+- **Difficulty:** Medium/Hard
+- **Problem:** Sell `n` items, each with a `category` and a `price`. The profit from selling an item equals `price * (number of distinct categories sold so far, including this item)`. Items can be sold in any order. Maximize total profit.
+- **Topics:** Hash map (min per key), greedy, sorting
+- **Notes:** Key insight — the multiplier only increases when you sell the *first* item from a new category, so to reach the max multiplier as cheaply as possible:
+  1. **Unlock categories:** find the cheapest item in each distinct category.
+  2. **Ramp up:** sort those cheapest-per-category items ascending and "sell" them first — this unlocks categories one by one while minimizing the cost paid at low multipliers.
+  3. **Max profit:** once all categories are unlocked (multiplier = number of distinct categories), sell every remaining item (including the unlock items themselves, which were already counted once during ramp-up) at the max multiplier — hence the final `ans -= multiplier * minsum` correction to avoid double-counting the unlock items at the wrong rate.
 ```cpp
-long long maxProfit(vector<int>& category, vector<int>& price){
-    map<int,int> mpp;
+#include <vector>
+#include <map>
+#include <algorithm>
+using namespace std;
+
+long long maxProfit(vector<int>& category, vector<int>& price) {
+    map<int, int> mpp;
     int n = category.size();
 
-    for(int i = 0; i < n; i++){
-        if(mpp.find(category[i]) != mpp.end()){
+    // 1. Find the cheapest item for each category
+    for (int i = 0; i < n; i++) {
+        if (mpp.find(category[i]) != mpp.end()) {
             mpp[category[i]] = min(mpp[category[i]], price[i]);
         } else {
             mpp[category[i]] = price[i];
         }
     }
 
+    // 2. Sort the minimums ascending
     vector<int> temp;
-
-    for(auto m : mpp){
+    for (auto m : mpp) {
         temp.push_back(m.second);
     }
-
     sort(temp.begin(), temp.end());
 
     long long ans = 0;
     long long minsum = 0;
-    for(int i = 0; i < temp.size(); i++){
-        ans += (i+1)*temp[i];
+
+    // 3. Sell the cheapest items to ramp up the multiplier
+    for (int i = 0; i < temp.size(); i++) {
+        ans += (i + 1) * temp[i];
         minsum += temp[i];
     }
+
+    // 4. Sell the rest at the max multiplier
     int multiplier = temp.size();
-    for(auto a:price){
+    for (auto a : price) {
         ans += multiplier * a;
     }
-
-    ans -= multiplier * (minsum);
+    ans -= multiplier * minsum; // Remove the initial unlock items we already sold
 
     return ans;
 }
