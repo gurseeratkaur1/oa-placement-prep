@@ -371,6 +371,15 @@ vector<string> substituteFixMessage(int fixTag, const map<string, string>& mappi
         ostringstream oss;
         oss << setfill('0') << setw(3) << checksum;
         tokens.back() = "10=" + oss.str();
+        // oss << setfill('0') << setw(3) << checksum  -> formats `checksum` as a string
+        // padded with leading '0's to a minimum width of 3 (e.g. 7 -> "007", 42 -> "042").
+        //
+        // Simpler alternative if the stream syntax isn't clicking, same result:
+        // string checksumStr = to_string(checksum);
+        // while (checksumStr.length() < 3) {
+        //     checksumStr = "0" + checksumStr;
+        // }
+        // tokens.back() = "10=" + checksumStr;
 
         string finalMsg = "";
         for (const string& token : tokens) {
