@@ -1,7 +1,5 @@
 # Squarepoint Capital
 
-## Round — Desk Quant Analyst (Date TBD, Source TBD)
-
 **Format:** <fill in — number of questions, time limit, platform>
 
 ### Question 1 — Count Ordered Pairs With Sum in a Range
@@ -388,6 +386,225 @@ vector<string> substituteFixMessage(int fixTag, const map<string, string>& mappi
         result.push_back(finalMsg);
     }
     return result;
+}
+```
+
+### Question 8 — Minimize Maximum Consecutive Characters (String Flips)
+- **Difficulty:** Hard
+- **Problem:** Given a string of two characters (e.g. `'a'`/`'b'`) and an integer `maxflip`, find the minimum possible value of "the longest run of consecutive identical characters" achievable by flipping at most `maxflip` characters.
+- **Topics:** Binary search on the answer, greedy
+- **Notes:** Search space for the answer `L` is `[1, N]`; `can_achieve(L)` checks whether `maxflip` flips suffice to break every run into chunks of length ≤ `L`.
+  - For `L == 1` (strictly alternating), there are only two possible target patterns (`abab...` and `baba...`) — just count mismatches against both and take the min.
+  - For `L > 1`, greedily walk the string tracking current run length; whenever a run ends, it costs `len / (L + 1)` flips to chop a run of that length into pieces no longer than `L` (standard "break into groups of size ≤ L" flip-count formula).
+```cpp
+#include <iostream>
+#include <string>
+#include <algorithm>
+using namespace std;
+
+bool can_achieve(int L, const string& s, int maxflip) {
+    int n = s.length();
+
+    // Edge Case: L = 1 means strictly alternating string
+    if (L == 1) {
+        char c1 = s[0], c2 = (s[0] == 'a') ? 'b' : 'a';
+        for (char c : s) if (c != c1) { c2 = c; break; }
+
+        int flip1 = 0, flip2 = 0;
+        for (int i = 0; i < n; ++i) {
+            if (s[i] != ((i % 2 == 0) ? c1 : c2)) flip1++;
+            if (s[i] != ((i % 2 == 0) ? c2 : c1)) flip2++;
+        }
+        return min(flip1, flip2) <= maxflip;
+    }
+
+    // Greedy for L > 1
+    int flips = 0, len = 1;
+    for (int i = 1; i < n; ++i) {
+        if (s[i] == s[i - 1]) {
+            len++;
+        } else {
+            flips += len / (L + 1);
+            len = 1;
+        }
+    }
+    flips += len / (L + 1);
+    return flips <= maxflip;
+}
+
+int minMaxConsecutive(string s, int maxflip) {
+    if (s.empty()) return 0;
+    int n = s.length();
+    int low = 1, high = n, ans = n;
+
+    while (low <= high) {
+        int mid = low + (high - low) / 2;
+        if (can_achieve(mid, s, maxflip)) {
+            ans = mid;
+            high = mid - 1;
+        } else {
+            low = mid + 1;
+        }
+    }
+    return ans;
+}
+```
+
+### Question 9 — Server Task Scheduling
+- **Difficulty:** Hard
+- **Problem:** `n` servers and `m` tasks, where array `a` maps each task to the server that originally owns it. A server takes 1 microsecond to do its own task, 2 microseconds to do a task offloaded from another server. All servers work in parallel. Find the minimum time to complete all tasks.
+- **Topics:** Binary search on the answer, greedy feasibility check
+- **Notes:** Binary search on total time `T`. `can_finish(T)`: for each server, if its own task count exceeds `T`, it needs `(count - T)` tasks offloaded elsewhere; otherwise it has `(T - count) / 2` spare capacity to help others (each offloaded task costs 2 microseconds of spare time). Feasible iff total help needed ≤ total help available.
+```cpp
+#include <vector>
+using namespace std;
+
+bool can_finish(long long T, const vector<int>& counts) {
+    long long needed_help = 0;
+    long long help_available = 0;
+
+    for (int count : counts) {
+        if (count > T) {
+            needed_help += (count - T);
+        } else {
+            help_available += ((T - count) / 2);
+        }
+    }
+    return help_available >= needed_help;
+}
+
+long long minTimeToComplete(int n, int m, const vector<int>& a) {
+    if (m == 0) return 0;
+
+    vector<int> counts(n + 1, 0);
+    for (int server_id : a) {
+        counts[server_id]++;
+    }
+
+    long long low = 1, high = 2LL * m;
+    long long ans = high;
+
+    while (low <= high) {
+        long long mid = low + (high - low) / 2;
+        if (can_finish(mid, counts)) {
+            ans = mid;
+            high = mid - 1;
+        } else {
+            low = mid + 1;
+        }
+    }
+    return ans;
+}
+```
+
+### Question 10 — Trending Hashtags in a Time Window
+- **Difficulty:** Medium
+- **Problem:** Given tweets and their timestamps, find the top 3 most frequent hashtags (tokens starting with `=`) within the time window `[currentTime - timeWindow, currentTime]`. A tag only qualifies with frequency ≥ 2. Ties broken by: (1) earliest timestamp, (2) alphabetical order.
+- **Topics:** Hash map, string parsing, custom sort comparator
+- **Notes:** Manually scan each tweet for `=`-prefixed tokens (ending at space or string end), lowercasing as you go. Track `{frequency, earliest timestamp}` per tag in an `unordered_map`. Filter to tags with freq ≥ 2, then sort by the 3-level comparator (freq desc → time asc → alphabetical asc) and take the top 3.
+```cpp
+#include <vector>
+#include <string>
+#include <unordered_map>
+#include <algorithm>
+using namespace std;
+
+struct TagInfo {
+    string tag;
+    int freq;
+    int firstTime;
+};
+
+// Sort Rules: Highest Freq -> Earliest Time -> Alphabetical
+bool compareTags(const TagInfo& a, const TagInfo& b) {
+    if (a.freq != b.freq) return a.freq > b.freq;
+    if (a.firstTime != b.firstTime) return a.firstTime < b.firstTime;
+    return a.tag < b.tag;
+}
+
+vector<string> getTopTags(const vector<string>& tweets, const vector<int>& timestamps, int currentTime, int timeWindow) {
+    int m = timestamps.size();
+    unordered_map<string, pair<int, int>> mpp; // tag -> {freq, earliestTime}
+
+    for (int i = 0; i < m; i++) {
+        if (timestamps[i] < (currentTime - timeWindow) || timestamps[i] > currentTime) continue;
+
+        string temp = tweets[i];
+        int n = temp.size();
+
+        for (int j = 0; j < n; j++) {
+            if (temp[j] == '=') {
+                string tag = "";
+                int k = j + 1;
+                while (k < n && temp[k] != ' ') {
+                    if (temp[k] >= 'A' && temp[k] <= 'Z') {
+                        tag += (temp[k] - 'A') + 'a';
+                    } else {
+                        tag += temp[k];
+                    }
+                    k++; // Critical: Prevents std::bad_alloc / MLE
+                }
+
+                if (mpp.find(tag) != mpp.end()) {
+                    mpp[tag].first++;
+                    mpp[tag].second = min(mpp[tag].second, timestamps[i]);
+                } else {
+                    mpp[tag] = {1, timestamps[i]};
+                }
+                j = k;
+            }
+        }
+    }
+
+    vector<TagInfo> validTags;
+    for (unordered_map<string, pair<int, int>>::iterator it = mpp.begin(); it != mpp.end(); ++it) {
+        if (it->second.first >= 2) {
+            validTags.push_back({it->first, it->second.first, it->second.second});
+        }
+    }
+
+    sort(validTags.begin(), validTags.end(), compareTags);
+
+    vector<string> ans;
+    for (int i = 0; i < min(3, (int)validTags.size()); i++) {
+        ans.push_back(validTags[i].tag);
+    }
+    return ans;
+}
+```
+
+### Question 11 — Minimum Cost Train Route (Red/Blue Lines)
+- **Difficulty:** Medium
+- **Problem:** Find the minimum cost to reach every stop `i`. You can travel via the Red Line (costs `red[i]`) or the Blue Line (costs `blue[i]`). Switching from Red to Blue costs an extra `blueCost`; switching from Blue to Red is free.
+- **Topics:** 1D dynamic programming
+- **Notes:** Maintain two running states: `dpRed[i]` = min cost to reach stop `i` while on the Red track, `dpBlue[i]` = min cost while on Blue. At each step, `dpRed[i+1] = min(stay on red, switch from blue (free)) + red[i]`; `dpBlue[i+1] = min(switch from red (+blueCost), stay on blue) + blue[i]`. Answer per stop is `min(dpRed, dpBlue)`. Use `long long` — costs can be large.
+```cpp
+#include <vector>
+#include <algorithm>
+using namespace std;
+
+vector<long long> minTrainCosts(const vector<int>& red, const vector<int>& blue, int blueCost) {
+    int n = red.size();
+
+    vector<long long> dpRed(n + 1, 0);
+    vector<long long> dpBlue(n + 1, 0);
+    vector<long long> ans(n + 1, 0);
+
+    dpBlue[0] = blueCost;
+    dpRed[0] = 0;
+
+    for (int i = 0; i < n; i++) {
+        // Switch to red is free, so compare staying on red vs switching from blue
+        dpRed[i+1] = min(dpRed[i] + red[i], dpBlue[i] + red[i]);
+
+        // Switch to blue costs 'blueCost', compare staying on blue vs switching from red
+        dpBlue[i+1] = min(dpRed[i] + blueCost + blue[i], dpBlue[i] + blue[i]);
+
+        ans[i+1] = min(dpRed[i+1], dpBlue[i+1]);
+    }
+
+    // Return costs for stops 1 to n
+    return vector<long long>(ans.begin() + 1, ans.end());
 }
 ```
 
