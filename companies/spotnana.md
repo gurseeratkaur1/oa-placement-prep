@@ -7,35 +7,59 @@
 ### Question 1 — Minimize Tree Depth
 - **Difficulty:** Hard
 - **Problem:** Given a tree with `tree_nodes` nodes (indexed 1 to `tree_nodes`), rooted at Node 1, edges given as `tree_from` and `tree_to` arrays, and an integer `maxOperations`. In one operation, detach any node from its current parent and reattach it directly to the root (Node 1) — its entire subtree moves with it. Find the minimum possible depth (max height) of the tree achievable using at most `maxOperations` operations.
-- **Topics:** Trees, binary search on the answer, greedy
-- **Notes:** Binary search on the answer `D` (candidate max depth), range `[1, originalHeight]`. Feasibility check for a fixed `D`: BFS from the root (root depth = 1); whenever a node's natural depth (`parent_depth + 1`) would exceed `D`, cut it — reattach to root, reset its depth to 2, count one operation — and continue the BFS using each node's *post-cut* depth for its own children. Feasible iff total cuts ≤ `maxOperations`. Optimal because cutting a node the moment it first exceeds `D` fixes its whole subtree in one operation; delaying would force cutting multiple descendants individually instead. Use BFS, not recursive DFS — avoids stack overflow on a skewed/deep tree.
+- **Topics:** Trees, binary search on the answer, greedy, bottom-up merging
+- **Notes:** Binary search on the answer `D` (candidate max depth), range `[1, originalHeight]`.
+  - **Flawed first attempt (keep as a counterexample to remember):** a simple top-down BFS that cuts a node the instant its depth exceeds `D` *looks* right but isn't — it reacts only after a node already violates, missing cases where cutting a shared ancestor once would resolve several violating descendants at once. Counterexample: chain `1→2→3` with `3→4` and `3→5`, `D=3`. Top-down BFS cuts node 4 and node 5 separately (2 ops). Optimal is cutting node 3 alone (1 op) — its children 4,5 ride along and land at depth 3, which is fine.
+  - **Correct approach:** a cut at node `u` only gives its subtree `D-2` extra levels of reach beyond `u` (since `u` becomes depth 2 and everything below keeps its relative structure). So a violating node `v` (`depth(v) > D`) can be saved by *any* ancestor cut at depth `>= depth(v) - (D-2)` — not just a cut at `v` itself. Process the tree bottom-up (reverse BFS order avoids recursion-depth issues on skewed trees) and greedily delay cutting as long as possible, merging requirements from sibling subtrees into a single higher cut whenever the current node is still deep enough to serve all of them; force the cut at the child the moment the parent becomes too shallow to keep delaying. This is the same "resolve at the latest valid point" greedy family as minimum-arrows/interval-point-cover.
 ```cpp
 #include <vector>
 using namespace std;
 
 bool feasible(int D, long long maxOperations, vector<vector<int>>& adj, int n) {
-    vector<int> depth(n + 1, 0);
+    if (D == 1) return n == 1; // a cut can never bring a node below depth 2
+
+    vector<int> parent(n + 1, 0), depth(n + 1, 0);
     vector<bool> visited(n + 1, false);
-    vector<int> q; q.reserve(n);
-    q.push_back(1);
+    vector<int> order;
+    order.reserve(n);
+
+    vector<int> q = {1};
     visited[1] = true;
     depth[1] = 1;
-
-    long long ops = 0;
     for (int head = 0; head < (int)q.size(); head++) {
         int u = q[head];
+        order.push_back(u);
         for (int v : adj[u]) {
             if (visited[v]) continue;
             visited[v] = true;
-            int d = depth[u] + 1;
-            if (d > D) {
-                ops++;
-                d = 2; // reattached directly under root
-            }
-            depth[v] = d;
+            parent[v] = u;
+            depth[v] = depth[u] + 1;
             q.push_back(v);
         }
     }
+
+    vector<int> pendingThreshold(n + 1, 0); // 0 = nothing pending
+    long long ops = 0;
+
+    // Reverse BFS order = children always processed before their parent.
+    for (int i = (int)order.size() - 1; i >= 0; i--) {
+        int v = order[i];
+        int merged = 0;
+        for (int c : adj[v]) {
+            if (c == parent[v]) continue;
+            if (pendingThreshold[c] == 0) continue;
+            if (depth[v] >= pendingThreshold[c]) {
+                merged = max(merged, pendingThreshold[c]); // still room — delay, merge up
+            } else {
+                ops++; // out of room — cut must happen at child c
+            }
+        }
+        if (depth[v] > D) {
+            merged = max(merged, depth[v] - (D - 2));
+        }
+        pendingThreshold[v] = merged;
+    }
+
     return ops <= maxOperations;
 }
 
